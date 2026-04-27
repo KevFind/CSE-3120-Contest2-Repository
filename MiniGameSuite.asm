@@ -7,6 +7,7 @@
 
 INCLUDE Irvine32.inc
 INCLUDE GraphWin.inc
+;INCLUDE Win32API.inc
 
 ;==================== DATA =======================
 .data
@@ -32,8 +33,12 @@ GreetText  BYTE "This window is shown immediately after "
 CloseMsg   BYTE "WM_CLOSE message received",0
 
 ErrorTitle  BYTE "Error",0
-WindowName  BYTE "ASM Windows App",0
-className   BYTE "ASMWin",0
+WindowName  BYTE "Human Benchmark Clone",0
+className   BYTE "HBWinClass",0
+TitleText BYTE "HUMAN BENCHMARK",0
+SubtitleText BYTE "Click to start...",0
+
+
 
 ; Define the Application's Window class structure.
 MainWin WNDCLASS <NULL,WinProc,NULL,NULL,NULL,NULL,NULL, \
@@ -84,8 +89,8 @@ WinMain PROC
 	INVOKE UpdateWindow, hMainWnd
 
 ; Display a greeting message.
-	INVOKE MessageBox, hMainWnd, ADDR GreetText,
-	  ADDR GreetTitle, MB_OK
+;	INVOKE MessageBox, hMainWnd, ADDR GreetText,
+;	  ADDR GreetTitle, MB_OK
 
 ; Begin the program's message-handling loop.
 Message_Loop:
@@ -106,64 +111,97 @@ Exit_Program:
 WinMain ENDP
 
 ;-----------------------------------------------------
-WinProc PROC,
-	hWnd:DWORD, localMsg:DWORD, wParam:DWORD, lParam:DWORD
 ; The application's message handler, which handles
 ; application-specific messages. All other messages
 ; are forwarded to the default Windows message
 ; handler.
 ;-----------------------------------------------------
+WinProc PROC,;USES ebx esi edi,
+	hWnd:DWORD, localMsg:DWORD, wParam:DWORD, lParam:DWORD
+	;LOCAL ps:PAINTSTRUCT
+    ;LOCAL hdc:DWORD
+
 	mov eax, localMsg
 
-	.IF eax == WM_LBUTTONDOWN		; mouse button?
-  
-  ; convert
-   pushad
+;	.IF eax == WM_LBUTTONDOWN		; mouse button?
+;  
+;  ; convert
+;   pushad
+;
+;   mov dx, 0
+;   mov ebx, 10
+;   mov eax, lParam
+;   and eax, 0ffffh
+;   div bx
+;   or dl, 30h
+;   mov popupx[3], dl
+;
+;   mov dx, 0
+;   div bx
+;   or dl, 30h
+;   mov popupx[2], dl
+;
+;;  here may add two more digits, by replicating the last block of 4 lines and adjusting the index in popupx
+;
+;   mov dx, 0
+;   div bx
+;   or dl, 30h
+;   mov popupx[1], dl
+;
+;   mov dx, 0
+;   div bx
+;   or dl, 30h
+;   mov popupx[0], dl
+;
+;   popad
+;   
+;	  INVOKE MessageBox, hWnd, ADDR PopupText,
+;	    ADDR PopupTitle, MB_OK
+;	  jmp WinProcExit
+;	.ELSEIF eax == WM_CREATE		; create window?
+;	  INVOKE MessageBox, hWnd, ADDR AppLoadMsgText,
+;	    ADDR AppLoadMsgTitle, MB_OK
+;	  jmp WinProcExit
+;	.ELSEIF eax == WM_CLOSE		; close window?
+;	  INVOKE MessageBox, hWnd, ADDR CloseMsg,
+;	    ADDR WindowName, MB_OK
+;	  INVOKE PostQuitMessage,0
+;	  jmp WinProcExit
+;	.ELSE		; other message?
+;	  INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+;	  jmp WinProcExit
+;	.ENDIF
 
-   mov dx, 0
-   mov ebx, 10
-   mov eax, lParam
-   and eax, 0ffffh
-   div bx
-   or dl, 30h
-   mov popupx[3], dl
+; ----------------------------
+    ; When window is created
+    ; ----------------------------
+    .IF eax == WM_CREATE
 
-   mov dx, 0
-   div bx
-   or dl, 30h
-   mov popupx[2], dl
+        INVOKE MessageBox,
+            hWnd,
+            ADDR TitleText,
+            ADDR WindowName,
+            MB_OK
 
-;  here may add two more digits, by replicating the last block of 4 lines and adjusting the index in popupx
+        jmp WinProcExit
 
-   mov dx, 0
-   div bx
-   or dl, 30h
-   mov popupx[1], dl
+    ; ----------------------------
+    ; Close window
+    ; ----------------------------
+    .ELSEIF eax == WM_CLOSE
 
-   mov dx, 0
-   div bx
-   or dl, 30h
-   mov popupx[0], dl
+        INVOKE PostQuitMessage, 0
+        jmp WinProcExit
 
-   popad
-   
-	  INVOKE MessageBox, hWnd, ADDR PopupText,
-	    ADDR PopupTitle, MB_OK
-	  jmp WinProcExit
-	.ELSEIF eax == WM_CREATE		; create window?
-	  INVOKE MessageBox, hWnd, ADDR AppLoadMsgText,
-	    ADDR AppLoadMsgTitle, MB_OK
-	  jmp WinProcExit
-	.ELSEIF eax == WM_CLOSE		; close window?
-	  INVOKE MessageBox, hWnd, ADDR CloseMsg,
-	    ADDR WindowName, MB_OK
-	  INVOKE PostQuitMessage,0
-	  jmp WinProcExit
-	.ELSE		; other message?
-	  INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
-	  jmp WinProcExit
-	.ENDIF
+    ; ----------------------------
+    ; Default behavior
+    ; ----------------------------
+    .ELSE
 
+        INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+        jmp WinProcExit
+
+    .ENDIF
 WinProcExit:
 	ret
 WinProc ENDP
