@@ -9,48 +9,62 @@ WM_CHAR    EQU 0102h
 .data
 ErrorTitle  BYTE "Error",0
 
-WindowName  BYTE "Human Benchmark Clone",0
+WindowName  BYTE "Welcome to the Human Benchmark",0
 className   BYTE "HBWinClass",0
 
-titleScreen BYTE "==============================",0dh,0ah,
-                 "      HUMAN BENCHMARK        ",0dh,0ah,
-                 "==============================",0dh,0ah,0dh,0ah,
+titleScreen BYTE "==================================",0dh,0ah,
+                 "          HUMAN BENCHMARK         ",0dh,0ah,
+                 "==================================",0dh,0ah,0dh,0ah,
                  "1) Reaction Time",0dh,0ah,
-                 "2) Game Two",0dh,0ah,
+                 "2) Number Memory",0dh,0ah,
                  "3) Game Three",0dh,0ah,0dh,0ah,0
 
-prompt1 BYTE "Check Your Reaction Time?",0dh,0ah,
+prompt1 BYTE "Check Your Reaction Time",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Next Game",0dh,0ah,
+              "CANCEL = Exit",0
+prompt2 BYTE "Number Memory",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Next Game",0dh,0ah,
+              "CANCEL = Exit",0
+prompt3 BYTE "Game Three",0dh,0ah,
               "YES = Play",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
 
-prompt2 BYTE "Game Two?",0dh,0ah,
-              "YES = Play",0dh,0ah,
-              "NO = Next Game",0dh,0ah,
-              "CANCEL = Exit",0
-
-prompt3 BYTE "Game Three?",0dh,0ah,
-              "YES = Play",0dh,0ah,
-              "NO = Back to Start",0dh,0ah,
-              "CANCEL = Exit",0
-
-reactMsg BYTE "Reaction Test Starting...",0
-game2Msg BYTE "Game 2 Selected",0
+game1Msg BYTE "Reaction Test Starting...",0
+game2Msg BYTE "Number Memory Test Starting...",0
 game3Msg BYTE "Game 3 Selected",0
-
-; Reaction instructions
-reactInst BYTE "Keep your mouse over the window.",0dh,0ah,
-               "After pressing OK, wait for CLICK NOW!",0dh,0ah,
-               "Then click as fast as possible.",0
-
-resultBuffer BYTE "Reaction Time: 0000 ms",0
-
-; Large visual titles
-clickTitle BYTE "***** CLICK NOW! *****",0
 againTitle BYTE "Want to play again?",0
 
-; Timing
+; Reaction Time instructions
+game1Inst BYTE "Leave your mouse over the OK button",0dh,0ah,
+               "After pressing OK, wait for CLICK NOW!",0dh,0ah,
+               "Then click as fast as possible.",0
+reactBuffer BYTE "Reaction Time: 0000 ms",0
 startTime DWORD 0
+clickTitle BYTE "************* CLICK NOW! *************",0dh,0ah,
+                " ",0dh,0ah,
+                " ",0
+
+; Number Memory instructions
+game2Inst BYTE "Remember the numbers displayed.",0dh,0ah,
+               "After pressing OK, Click on the console and enter them in order",0dh,0ah,
+               "If you get it right, it becomes more challenging.",0dh,0ah,
+               "Please resize the console to see this Message and the console at the same time",0dh,0ah,
+               "Only follow each button and prompt.",0
+
+correctBuffer BYTE 21 DUP(0)   ; up to 20 digits as max level, plus null terminator
+userInput     BYTE 21 DUP(0)
+level DWORD 0       ; current level
+
+winMsg     BYTE "You win! 20 digits remembered!",0
+loseMsg    BYTE "Game Over!",0dh,0ah,
+                "The correct answer was",0
+nextMsg    BYTE "Correct! Moving to next level.",0
+
+inputPrompt BYTE "Enter the number: ",0                 ; Console Prompt
+
 
 ; Define the Application's Window class structure.
 MainWin WNDCLASS <NULL,WinProc,NULL,NULL,NULL,NULL,NULL, \
@@ -64,6 +78,8 @@ hInstance DWORD ?
 ;=================== CODE =========================
 .code
 WinMain PROC
+call Randomize      ; seed random number generator
+
 ; Get a handle to the current process.
 	INVOKE GetModuleHandle, NULL
 	mov hInstance, eax
@@ -153,63 +169,136 @@ WinProc PROC,
         cmp eax, IDCANCEL
         je exit_all
 
-        jmp menu_start
+        jmp menu_start      ; loop back around
 
 	option1:
         ; Reaction test setup
-        INVOKE MessageBox, hWnd, ADDR reactInst,
+        INVOKE MessageBox, hWnd, ADDR game1Inst,
             ADDR WindowName, MB_OK
 
-        ; WAIT phase
-        ; Random delay between 3-6 seconds
-        mov eax, 3000
-        call RandomRange    ; returns 0–2999 in eax
-        add eax, 3000       ; now 3000–5999 ms
+        ; Random delay between 2-6 seconds
+        mov eax, 4000
+        call RandomRange    ; returns 0–3999 in eax
+        add eax, 2000       ; now 2000–5999 ms
         call Delay          ; pause for that duration
 
+        ; Start timer
         call GetMseconds
         mov startTime, eax
         
-        ; User reacts by pressing OK
+        ; User reacts by pressing OK and ends timer
         INVOKE MessageBox, hWnd, ADDR clickTitle,
             ADDR WindowName, MB_OK
-        
         call GetMseconds
         sub eax, startTime   ; eax = reaction time
 
        ; Convert to ASCII
-    pushad
-    mov ecx, 5
-    mov ebx, 10
-    lea edi, resultBuffer+20   ; last digit position
+        pushad
+        mov ecx, 5
+        mov ebx, 10
+        lea edi, reactBuffer+20   ; last digit position
 
-    convert_loop:
-    xor edx, edx
-    div ebx
-    add dl, '0'
-    mov [edi], dl
-    dec edi
-    loop convert_loop
-    popad
+        convert_loop:
+        xor edx, edx
+        div ebx
+        add dl, '0'
+        mov [edi], dl
+        dec edi
+        loop convert_loop
+        popad
 
         ; First message: show result
-        INVOKE MessageBox, hWnd, ADDR resultBuffer,
+        INVOKE MessageBox, hWnd, ADDR reactBuffer,
             ADDR WindowName, MB_OK
 
-        ; Second message: ask to play again
+        ; Ask to play again
         INVOKE MessageBox, hWnd, ADDR againTitle,
-            ADDR WindowName, MB_YESNOCANCEL
-
+            ADDR WindowName, MB_YESNO
         cmp eax, IDYES
         je option1
         cmp eax, IDNO
         je menu_start
 
     option2:
-        INVOKE MessageBox, hWnd, ADDR game2Msg,
+        INVOKE MessageBox, hWnd, ADDR game2Inst,
             ADDR WindowName, MB_OK
-        INVOKE PostQuitMessage, 0
-        jmp WinProcExit
+    
+    mov level, 1    ; start at level 1, which is 1 digit to remember
+
+    level_loop:
+
+    ; check win condition, max level is 20
+    mov eax, level
+    cmp eax, 21
+    je win_game
+
+    ; generate number string
+    pushad
+    mov edi, OFFSET correctBuffer
+    mov ecx, level
+
+    get_digits:
+    mov eax, 10
+    call RandomRange        ; returns 0-9 in eax
+    add al, '0'             ; convert to ASCII
+    mov [edi], al           ; store digit
+    inc edi
+    loop get_digits         ; repeat for number of digits in current level
+    mov BYTE PTR [edi], 0   ; null terminator
+    popad
+
+    ; Show number and Prompt user
+    INVOKE MessageBox, hWnd, ADDR correctBuffer,
+        ADDR WindowName, MB_OK
+    call Clrscr
+    mov edx, OFFSET inputPrompt
+    call WriteString
+    mov edx, OFFSET userInput       ; buffer for user input
+    mov ecx, 21
+    call ReadString
+    mov esi, OFFSET correctBuffer   ; pointer to correct answer
+    mov edi, OFFSET userInput       ; pointer to user input to compare
+
+    ; Compare character by character until null terminator
+    compare_loop:   
+    mov al, [esi]
+    mov bl, [edi]
+    cmp al, bl
+    jne lose_game
+    cmp al, 0
+    je correct_level
+    inc esi
+    inc edi
+    jmp compare_loop
+
+    ; If we get here, the user was correct
+    correct_level:
+    INVOKE MessageBox, hWnd, ADDR nextMsg,
+        ADDR WindowName, MB_OK
+    inc level
+    jmp level_loop
+
+    ; If we get here, the user was incorrect
+    lose_game:
+    INVOKE MessageBox, hWnd, ADDR loseMsg,
+        ADDR WindowName, MB_OK
+    INVOKE MessageBox, hWnd, ADDR correctBuffer,
+        ADDR WindowName, MB_OK
+    jmp end_game
+
+    ; If we get here, the user won by reaching level 21 (remembering 20 digits)
+    win_game:
+    INVOKE MessageBox, hWnd, ADDR winMsg,
+        ADDR WindowName, MB_OK
+
+    ; Ask to play again
+    end_game:
+    INVOKE MessageBox, hWnd, ADDR againTitle,
+        ADDR WindowName, MB_YESNO
+    cmp eax, IDYES
+    je option2
+    cmp eax, IDNO
+    je menu_start
 
     option3:
         INVOKE MessageBox, hWnd, ADDR game3Msg,
@@ -217,7 +306,6 @@ WinProc PROC,
         INVOKE PostQuitMessage, 0
         jmp WinProcExit
         
-
     exit_all:
         INVOKE PostQuitMessage, 0
         jmp WinProcExit
@@ -228,9 +316,9 @@ WinProc PROC,
         jmp WinProcExit
 
     ; Default behavior
-    .ELSE
-        INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
-        jmp WinProcExit
+    ;.ELSE
+    ;    INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+    ;    jmp WinProcExit
     .ENDIF
 
 WinProcExit:
