@@ -1,44 +1,48 @@
-; Windows Application                   (WinApp.asm)
-
-; This program displays a resizable application window and
-; several popup message boxes.
-; Thanks to Tom Joyce for creating a prototype
-; from which this program was derived.
-
 INCLUDE Irvine32.inc
 INCLUDE GraphWin.inc
-;INCLUDE Win32API.inc
+
+WM_KEYDOWN EQU 0100h
+WM_KEYUP   EQU 0101h
+WM_CHAR    EQU 0102h
 
 ;==================== DATA =======================
 .data
-
-AppLoadMsgTitle BYTE "Application Loaded",0
-AppLoadMsgText  BYTE "This window displays when the WM_CREATE "
-	            BYTE "message is received",0
-
-PopupTitle BYTE "Popup Window",0
-; PopupText  BYTE "This window was activated by a "
-	       ; BYTE "WM_LBUTTONDOWN message",0
-
-PopupText BYTE "This window was activated by a BUTTON down message at x="
-PopupTextXPos = $ - PopupText
-popupx    BYTE 4 DUP(" ")
-          BYTE 0 ; null terminator
-PopupTextSize = $ - PopupText
-
-GreetTitle BYTE "Main Window Active",0
-GreetText  BYTE "This window is shown immediately after "
-	       BYTE "CreateWindow and UpdateWindow are called.",0
-
-CloseMsg   BYTE "WM_CLOSE message received",0
-
+;CloseMsg   BYTE "WM_CLOSE message received",0
 ErrorTitle  BYTE "Error",0
+
 WindowName  BYTE "Human Benchmark Clone",0
 className   BYTE "HBWinClass",0
-TitleText BYTE "HUMAN BENCHMARK",0
-SubtitleText BYTE "Click to start...",0
 
+titleScreen BYTE "==============================",0dh,0ah,
+                 "      HUMAN BENCHMARK        ",0dh,0ah,
+                 "==============================",0dh,0ah,0dh,0ah,
+                 "1) Reaction Time",0dh,0ah,
+                 "2) Game Two",0dh,0ah,
+                 "3) Game Three",0dh,0ah,0dh,0ah,0
 
+;menuMsg BYTE "Press a number to choose:",0dh,0ah,
+;              "1) Reaction Time",0dh,0ah,
+;              "2) Game Two",0dh,0ah,
+;              "3) Game Three",0
+
+prompt1 BYTE "Reaction Time?",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Next Game",0dh,0ah,
+              "CANCEL = Exit",0
+
+prompt2 BYTE "Game Two?",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Next Game",0dh,0ah,
+              "CANCEL = Exit",0
+
+prompt3 BYTE "Game Three?",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Back to Start",0dh,0ah,
+              "CANCEL = Exit",0
+
+reactMsg BYTE "Reaction Test Starting...",0
+game2Msg BYTE "Game 2 Selected",0
+game3Msg BYTE "Game 3 Selected",0
 
 ; Define the Application's Window class structure.
 MainWin WNDCLASS <NULL,WinProc,NULL,NULL,NULL,NULL,NULL, \
@@ -88,10 +92,6 @@ WinMain PROC
 	INVOKE ShowWindow, hMainWnd, SW_SHOW
 	INVOKE UpdateWindow, hMainWnd
 
-; Display a greeting message.
-;	INVOKE MessageBox, hMainWnd, ADDR GreetText,
-;	  ADDR GreetTitle, MB_OK
-
 ; Begin the program's message-handling loop.
 Message_Loop:
 	; Get next message from the queue.
@@ -110,98 +110,83 @@ Exit_Program:
 	  INVOKE ExitProcess,0
 WinMain ENDP
 
-;-----------------------------------------------------
-; The application's message handler, which handles
-; application-specific messages. All other messages
-; are forwarded to the default Windows message
-; handler.
-;-----------------------------------------------------
-WinProc PROC,;USES ebx esi edi,
-	hWnd:DWORD, localMsg:DWORD, wParam:DWORD, lParam:DWORD
-	;LOCAL ps:PAINTSTRUCT
-    ;LOCAL hdc:DWORD
 
+WinProc PROC,
+	hWnd:DWORD, localMsg:DWORD, wParam:DWORD, lParam:DWORD
 	mov eax, localMsg
 
-;	.IF eax == WM_LBUTTONDOWN		; mouse button?
-;  
-;  ; convert
-;   pushad
-;
-;   mov dx, 0
-;   mov ebx, 10
-;   mov eax, lParam
-;   and eax, 0ffffh
-;   div bx
-;   or dl, 30h
-;   mov popupx[3], dl
-;
-;   mov dx, 0
-;   div bx
-;   or dl, 30h
-;   mov popupx[2], dl
-;
-;;  here may add two more digits, by replicating the last block of 4 lines and adjusting the index in popupx
-;
-;   mov dx, 0
-;   div bx
-;   or dl, 30h
-;   mov popupx[1], dl
-;
-;   mov dx, 0
-;   div bx
-;   or dl, 30h
-;   mov popupx[0], dl
-;
-;   popad
-;   
-;	  INVOKE MessageBox, hWnd, ADDR PopupText,
-;	    ADDR PopupTitle, MB_OK
-;	  jmp WinProcExit
-;	.ELSEIF eax == WM_CREATE		; create window?
-;	  INVOKE MessageBox, hWnd, ADDR AppLoadMsgText,
-;	    ADDR AppLoadMsgTitle, MB_OK
-;	  jmp WinProcExit
-;	.ELSEIF eax == WM_CLOSE		; close window?
-;	  INVOKE MessageBox, hWnd, ADDR CloseMsg,
-;	    ADDR WindowName, MB_OK
-;	  INVOKE PostQuitMessage,0
-;	  jmp WinProcExit
-;	.ELSE		; other message?
-;	  INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
-;	  jmp WinProcExit
-;	.ENDIF
-
-; ----------------------------
     ; When window is created
-    ; ----------------------------
     .IF eax == WM_CREATE
+        INVOKE MessageBox, hWnd, ADDR titleScreen,
+            ADDR WindowName, MB_OK
 
-        INVOKE MessageBox,
-            hWnd,
-            ADDR TitleText,
-            ADDR WindowName,
-            MB_OK
+        menu_start:
 
-        jmp WinProcExit
+        ; --- Game 1 ---
+        INVOKE MessageBox, hWnd, ADDR prompt1,
+            ADDR WindowName, MB_YESNOCANCEL
+		
+        cmp eax, IDYES
+        je option1
 
-    ; ----------------------------
-    ; Close window
-    ; ----------------------------
-    .ELSEIF eax == WM_CLOSE
+        cmp eax, IDCANCEL
+        je exit_all
 
+        ; --- Game 2 ---
+        INVOKE MessageBox, hWnd, ADDR prompt2,
+            ADDR WindowName, MB_YESNOCANCEL
+
+        cmp eax, IDYES
+        je option2
+
+        cmp eax, IDCANCEL
+        je exit_all
+
+        ; --- Game 3 ---
+        INVOKE MessageBox, hWnd, ADDR prompt3,
+            ADDR WindowName, MB_YESNOCANCEL
+        
+        cmp eax, IDYES
+        je option3
+
+        cmp eax, IDCANCEL
+        je exit_all
+
+        jmp menu_start
+
+	option1:
+        INVOKE MessageBox, hWnd, ADDR reactMsg,
+            ADDR WindowName, MB_OK
         INVOKE PostQuitMessage, 0
         jmp WinProcExit
 
-    ; ----------------------------
-    ; Default behavior
-    ; ----------------------------
-    .ELSE
-
-        INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+    option2:
+        INVOKE MessageBox, hWnd, ADDR game2Msg,
+            ADDR WindowName, MB_OK
+        INVOKE PostQuitMessage, 0
         jmp WinProcExit
 
+    option3:
+        INVOKE MessageBox, hWnd, ADDR game3Msg,
+            ADDR WindowName, MB_OK
+        INVOKE PostQuitMessage, 0
+        jmp WinProcExit
+
+    exit_all:
+        INVOKE PostQuitMessage, 0
+        jmp WinProcExit
+
+    ; Close window
+    .ELSEIF eax == WM_CLOSE
+        INVOKE PostQuitMessage, 0
+        jmp WinProcExit
+
+    ; Default behavior
+    .ELSE
+        INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+        jmp WinProcExit
     .ENDIF
+
 WinProcExit:
 	ret
 WinProc ENDP
