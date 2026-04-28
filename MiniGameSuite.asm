@@ -1,9 +1,8 @@
 INCLUDE Irvine32.inc
 INCLUDE GraphWin.inc
 
-WM_KEYDOWN EQU 0100h
-WM_KEYUP   EQU 0101h
-WM_CHAR    EQU 0102h
+SW_HIDE EQU 0   ; used to hide the window during instructions for game 2, so user can see both instructions and console at the same time
+SW_SHOW EQU 5
 
 ;==================== DATA =======================
 .data
@@ -12,12 +11,13 @@ ErrorTitle  BYTE "Error",0
 WindowName  BYTE "Welcome to the Human Benchmark",0
 className   BYTE "HBWinClass",0
 
-titleScreen BYTE "==================================",0dh,0ah,
-                 "          HUMAN BENCHMARK         ",0dh,0ah,
-                 "==================================",0dh,0ah,0dh,0ah,
+titleScreen BYTE "=========================================",0dh,0ah,
+                 "          HUMAN BENCHMARK (mini)         ",0dh,0ah,
+                 "=========================================",0dh,0ah,0dh,0ah,
+                 "Game List",0dh,0ah,
                  "1) Reaction Time",0dh,0ah,
                  "2) Number Memory",0dh,0ah,
-                 "3) Game Three",0dh,0ah,0dh,0ah,0
+                 "3) Mouse Clicker",0dh,0ah,0
 
 prompt1 BYTE "Check Your Reaction Time",0dh,0ah,
               "YES = Play",0dh,0ah,
@@ -27,7 +27,7 @@ prompt2 BYTE "Number Memory",0dh,0ah,
               "YES = Play",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
-prompt3 BYTE "Game Three",0dh,0ah,
+prompt3 BYTE "Mouse Clicker",0dh,0ah,
               "YES = Play",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
@@ -64,6 +64,21 @@ loseMsg    BYTE "Game Over!",0dh,0ah,
 nextMsg    BYTE "Correct! Moving to next level.",0
 
 inputPrompt BYTE "Enter the number: ",0                 ; Console Prompt
+
+; Mouse Clicker instructions
+game3Inst BYTE "Click as fast as you can for 5 seconds!",0dh,0ah,
+               "Click anywhere else in the window.",0dh,0ah,
+               " ",0dh,0ah,
+               " ",0dh,0ah,
+               " ",0dh,0ah,
+               " ",0dh,0ah,
+               " ",0            ; multiple blank lines to prevent accidental clicks during instructions
+clickCount DWORD 0
+gameActive DWORD 0
+clickStart DWORD 0
+
+clickBuffer BYTE "Clicks: 00000",0
+
 
 
 ; Define the Application's Window class structure.
@@ -192,22 +207,22 @@ WinProc PROC,
         call GetMseconds
         sub eax, startTime   ; eax = reaction time
 
-       ; Convert to ASCII
+        ; Convert to ASCII
         pushad
         mov ecx, 5
         mov ebx, 10
         lea edi, reactBuffer+20   ; last digit position
 
-        convert_loop:
+        convert_react:
         xor edx, edx
         div ebx
         add dl, '0'
         mov [edi], dl
         dec edi
-        loop convert_loop
+        loop convert_react
         popad
 
-        ; First message: show result
+        ; Show result
         INVOKE MessageBox, hWnd, ADDR reactBuffer,
             ADDR WindowName, MB_OK
 
@@ -220,90 +235,98 @@ WinProc PROC,
         je menu_start
 
     option2:
+        INVOKE ShowWindow, hMainWnd, SW_HIDE
         INVOKE MessageBox, hWnd, ADDR game2Inst,
             ADDR WindowName, MB_OK
     
-    mov level, 1    ; start at level 1, which is 1 digit to remember
+        mov level, 1    ; start at level 1, which is 1 digit to remember
 
-    level_loop:
+        level_loop:
 
-    ; check win condition, max level is 20
-    mov eax, level
-    cmp eax, 21
-    je win_game
+        ; check win condition, max level is 20
+        mov eax, level
+        cmp eax, 21
+        je win_game
 
-    ; generate number string
-    pushad
-    mov edi, OFFSET correctBuffer
-    mov ecx, level
+        ; generate number string
+        pushad
+        mov edi, OFFSET correctBuffer
+        mov ecx, level
 
-    get_digits:
-    mov eax, 10
-    call RandomRange        ; returns 0-9 in eax
-    add al, '0'             ; convert to ASCII
-    mov [edi], al           ; store digit
-    inc edi
-    loop get_digits         ; repeat for number of digits in current level
-    mov BYTE PTR [edi], 0   ; null terminator
-    popad
+        get_digits:
+        mov eax, 10
+        call RandomRange        ; returns 0-9 in eax
+        add al, '0'             ; convert to ASCII
+        mov [edi], al           ; store digit
+        inc edi
+        loop get_digits         ; repeat for number of digits in current level
+        mov BYTE PTR [edi], 0   ; null terminator
+        popad
 
-    ; Show number and Prompt user
-    INVOKE MessageBox, hWnd, ADDR correctBuffer,
-        ADDR WindowName, MB_OK
-    call Clrscr
-    mov edx, OFFSET inputPrompt
-    call WriteString
-    mov edx, OFFSET userInput       ; buffer for user input
-    mov ecx, 21
-    call ReadString
-    mov esi, OFFSET correctBuffer   ; pointer to correct answer
-    mov edi, OFFSET userInput       ; pointer to user input to compare
+        ; Show number and Prompt user
+        INVOKE MessageBox, hWnd, ADDR correctBuffer,
+            ADDR WindowName, MB_OK
+        call Clrscr
+        mov edx, OFFSET inputPrompt
+        call WriteString
+        mov edx, OFFSET userInput       ; buffer for user input
+        mov ecx, 21
+        call ReadString
+        mov esi, OFFSET correctBuffer   ; pointer to correct answer
+        mov edi, OFFSET userInput       ; pointer to user input to compare
 
-    ; Compare character by character until null terminator
-    compare_loop:   
-    mov al, [esi]
-    mov bl, [edi]
-    cmp al, bl
-    jne lose_game
-    cmp al, 0
-    je correct_level
-    inc esi
-    inc edi
-    jmp compare_loop
+        ; Compare character by character until null terminator
+        compare_loop:   
+        mov al, [esi]
+        mov bl, [edi]
+        cmp al, bl
+        jne lose_game
+        cmp al, 0
+        je correct_level
+        inc esi
+        inc edi
+        jmp compare_loop
 
-    ; If we get here, the user was correct
-    correct_level:
-    INVOKE MessageBox, hWnd, ADDR nextMsg,
-        ADDR WindowName, MB_OK
-    inc level
-    jmp level_loop
+        ; If we get here, the user was correct
+        correct_level:
+        INVOKE MessageBox, hWnd, ADDR nextMsg,
+            ADDR WindowName, MB_OK
+        inc level
+        jmp level_loop
 
-    ; If we get here, the user was incorrect
-    lose_game:
-    INVOKE MessageBox, hWnd, ADDR loseMsg,
-        ADDR WindowName, MB_OK
-    INVOKE MessageBox, hWnd, ADDR correctBuffer,
-        ADDR WindowName, MB_OK
-    jmp end_game
+        ; If we get here, the user was incorrect
+        lose_game:
+        INVOKE MessageBox, hWnd, ADDR loseMsg,
+            ADDR WindowName, MB_OK
+        INVOKE MessageBox, hWnd, ADDR correctBuffer,
+            ADDR WindowName, MB_OK
+        jmp end_game
 
-    ; If we get here, the user won by reaching level 21 (remembering 20 digits)
-    win_game:
-    INVOKE MessageBox, hWnd, ADDR winMsg,
-        ADDR WindowName, MB_OK
+        ; If we get here, the user won by reaching level 21 (remembering 20 digits)
+        win_game:
+        INVOKE MessageBox, hWnd, ADDR winMsg,
+            ADDR WindowName, MB_OK
 
-    ; Ask to play again
-    end_game:
-    INVOKE MessageBox, hWnd, ADDR againTitle,
-        ADDR WindowName, MB_YESNO
-    cmp eax, IDYES
-    je option2
-    cmp eax, IDNO
-    je menu_start
+        ; Ask to play again
+        end_game:
+        INVOKE MessageBox, hWnd, ADDR againTitle,
+            ADDR WindowName, MB_YESNO
+        cmp eax, IDYES
+        je option2
+        cmp eax, IDNO
+        je menu_start
 
     option3:
-        INVOKE MessageBox, hWnd, ADDR game3Msg,
+        INVOKE MessageBox, hWnd, ADDR game3Inst,
             ADDR WindowName, MB_OK
-        INVOKE PostQuitMessage, 0
+
+        ; initialize game
+        mov clickCount, 0
+        mov gameActive, 1
+
+        call GetMseconds        ; get start time for click counter
+        mov clickStart, eax
+
         jmp WinProcExit
         
     exit_all:
@@ -315,10 +338,53 @@ WinProc PROC,
         INVOKE PostQuitMessage, 0
         jmp WinProcExit
 
+    .ELSEIF eax == WM_LBUTTONDOWN
+        cmp gameActive, 1   ; only count clicks if game is active
+        jne skip_click      ; if not active, skip counting and time check
+
+        inc clickCount
+        call GetMseconds
+        mov ebx, eax
+        sub ebx, clickStart ; check elapsed time
+        cmp ebx, 5000       ; if more than 5 seconds, end game
+        jl skip_click       ; if less than 5 seconds, keep counting
+        mov gameActive, 0   ; time's up
+
+        ; Convert click count to ASCII
+        pushad
+        mov eax, clickCount
+        mov ecx, 5
+        mov ebx, 10
+        lea edi, clickBuffer+12   ; end of digits
+
+        convert_clicks:
+            xor edx, edx
+            div ebx
+            add dl, '0'
+            mov [edi], dl
+            dec edi
+            loop convert_clicks
+        popad
+
+        ; Show result
+        INVOKE MessageBox, hWnd, ADDR clickBuffer,
+            ADDR WindowName, MB_OK
+
+        ; Play again
+        INVOKE MessageBox, hWnd, ADDR againTitle,
+            ADDR WindowName, MB_YESNO
+        cmp eax, IDYES
+        je option3
+        cmp eax, IDNO
+        je menu_start
+
+    skip_click:
+        jmp WinProcExit
+
     ; Default behavior
-    ;.ELSE
-    ;    INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
-    ;    jmp WinProcExit
+    .ELSE
+        INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
+        jmp WinProcExit
     .ENDIF
 
 WinProcExit:
@@ -351,3 +417,8 @@ messageID  DWORD ?
 ErrorHandler ENDP
 
 END WinMain
+
+COMMENT @
+On google search: SW_HIDE, Hides the window and activates another window ... 
+Zero indicates that the window was previously hidden.
+@
