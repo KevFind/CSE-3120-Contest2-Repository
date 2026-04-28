@@ -7,7 +7,6 @@ WM_CHAR    EQU 0102h
 
 ;==================== DATA =======================
 .data
-;CloseMsg   BYTE "WM_CLOSE message received",0
 ErrorTitle  BYTE "Error",0
 
 WindowName  BYTE "Human Benchmark Clone",0
@@ -20,12 +19,7 @@ titleScreen BYTE "==============================",0dh,0ah,
                  "2) Game Two",0dh,0ah,
                  "3) Game Three",0dh,0ah,0dh,0ah,0
 
-;menuMsg BYTE "Press a number to choose:",0dh,0ah,
-;              "1) Reaction Time",0dh,0ah,
-;              "2) Game Two",0dh,0ah,
-;              "3) Game Three",0
-
-prompt1 BYTE "Reaction Time?",0dh,0ah,
+prompt1 BYTE "Check Your Reaction Time?",0dh,0ah,
               "YES = Play",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
@@ -43,6 +37,20 @@ prompt3 BYTE "Game Three?",0dh,0ah,
 reactMsg BYTE "Reaction Test Starting...",0
 game2Msg BYTE "Game 2 Selected",0
 game3Msg BYTE "Game 3 Selected",0
+
+; Reaction instructions
+reactInst BYTE "Keep your mouse over the window.",0dh,0ah,
+               "After pressing OK, wait for CLICK NOW!",0dh,0ah,
+               "Then click as fast as possible.",0
+
+resultBuffer BYTE "Reaction Time: 0000 ms",0
+
+; Large visual titles
+clickTitle BYTE "***** CLICK NOW! *****",0
+againTitle BYTE "Want to play again?",0
+
+; Timing
+startTime DWORD 0
 
 ; Define the Application's Window class structure.
 MainWin WNDCLASS <NULL,WinProc,NULL,NULL,NULL,NULL,NULL, \
@@ -120,45 +128,82 @@ WinProc PROC,
         INVOKE MessageBox, hWnd, ADDR titleScreen,
             ADDR WindowName, MB_OK
 
-        menu_start:
-
+    menu_start:
         ; --- Game 1 ---
         INVOKE MessageBox, hWnd, ADDR prompt1,
             ADDR WindowName, MB_YESNOCANCEL
-		
         cmp eax, IDYES
         je option1
-
         cmp eax, IDCANCEL
         je exit_all
 
         ; --- Game 2 ---
         INVOKE MessageBox, hWnd, ADDR prompt2,
             ADDR WindowName, MB_YESNOCANCEL
-
         cmp eax, IDYES
         je option2
-
         cmp eax, IDCANCEL
         je exit_all
 
         ; --- Game 3 ---
         INVOKE MessageBox, hWnd, ADDR prompt3,
             ADDR WindowName, MB_YESNOCANCEL
-        
         cmp eax, IDYES
         je option3
-
         cmp eax, IDCANCEL
         je exit_all
 
         jmp menu_start
 
 	option1:
-        INVOKE MessageBox, hWnd, ADDR reactMsg,
+        ; Reaction test setup
+        INVOKE MessageBox, hWnd, ADDR reactInst,
             ADDR WindowName, MB_OK
-        INVOKE PostQuitMessage, 0
-        jmp WinProcExit
+
+        ; WAIT phase
+        ; Random delay between 3-6 seconds
+        mov eax, 3000
+        call RandomRange    ; returns 0–2999 in eax
+        add eax, 3000       ; now 3000–5999 ms
+        call Delay          ; pause for that duration
+
+        call GetMseconds
+        mov startTime, eax
+        
+        ; User reacts by pressing OK
+        INVOKE MessageBox, hWnd, ADDR clickTitle,
+            ADDR WindowName, MB_OK
+        
+        call GetMseconds
+        sub eax, startTime   ; eax = reaction time
+
+       ; Convert to ASCII
+    pushad
+    mov ecx, 5
+    mov ebx, 10
+    lea edi, resultBuffer+20   ; last digit position
+
+    convert_loop:
+    xor edx, edx
+    div ebx
+    add dl, '0'
+    mov [edi], dl
+    dec edi
+    loop convert_loop
+    popad
+
+        ; First message: show result
+        INVOKE MessageBox, hWnd, ADDR resultBuffer,
+            ADDR WindowName, MB_OK
+
+        ; Second message: ask to play again
+        INVOKE MessageBox, hWnd, ADDR againTitle,
+            ADDR WindowName, MB_YESNOCANCEL
+
+        cmp eax, IDYES
+        je option1
+        cmp eax, IDNO
+        je menu_start
 
     option2:
         INVOKE MessageBox, hWnd, ADDR game2Msg,
@@ -171,6 +216,7 @@ WinProc PROC,
             ADDR WindowName, MB_OK
         INVOKE PostQuitMessage, 0
         jmp WinProcExit
+        
 
     exit_all:
         INVOKE PostQuitMessage, 0
