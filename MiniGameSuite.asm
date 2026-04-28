@@ -8,16 +8,17 @@ SW_SHOW EQU 5
 .data
 ErrorTitle  BYTE "Error",0
 
-WindowName  BYTE "Welcome to the Human Benchmark",0
+WindowName  BYTE "HUMAN BENCHMARK (mini)",0
 className   BYTE "HBWinClass",0
 
 titleScreen BYTE "=========================================",0dh,0ah,
-                 "          HUMAN BENCHMARK (mini)         ",0dh,0ah,
+                 "                          HUMAN BENCHMARK (mini)         ",0dh,0ah,
                  "=========================================",0dh,0ah,0dh,0ah,
                  "Game List",0dh,0ah,
                  "1) Reaction Time",0dh,0ah,
                  "2) Number Memory",0dh,0ah,
-                 "3) Mouse Clicker",0dh,0ah,0
+                 "3) Mouse Clicker",0dh,0ah,
+                 "4) Math Speed Test",0dh,0ah,0
 
 prompt1 BYTE "Check Your Reaction Time",0dh,0ah,
               "YES = Play",0dh,0ah,
@@ -28,6 +29,10 @@ prompt2 BYTE "Number Memory",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
 prompt3 BYTE "Mouse Clicker",0dh,0ah,
+              "YES = Play",0dh,0ah,
+              "NO = Next Game",0dh,0ah,
+              "CANCEL = Exit",0
+prompt4 BYTE "Math Speed Test",0dh,0ah,
               "YES = Play",0dh,0ah,
               "NO = Next Game",0dh,0ah,
               "CANCEL = Exit",0
@@ -42,8 +47,8 @@ game1Inst BYTE "Leave your mouse over the OK button",0dh,0ah,
                "After pressing OK, wait for CLICK NOW!",0dh,0ah,
                "Then click as fast as possible.",0
 reactBuffer BYTE "Reaction Time: 0000 ms",0
-startTime DWORD 0
-clickTitle BYTE "************* CLICK NOW! *************",0dh,0ah,
+reactStart DWORD 0
+clickNow BYTE "************* CLICK NOW! *************",0dh,0ah,
                 " ",0dh,0ah,
                 " ",0
 
@@ -53,7 +58,6 @@ game2Inst BYTE "Remember the numbers displayed.",0dh,0ah,
                "If you get it right, it becomes more challenging.",0dh,0ah,
                "Please resize the console to see this Message and the console at the same time",0dh,0ah,
                "Only follow each button and prompt.",0
-
 correctBuffer BYTE 21 DUP(0)   ; up to 20 digits as max level, plus null terminator
 userInput     BYTE 21 DUP(0)
 level DWORD 0       ; current level
@@ -62,7 +66,6 @@ winMsg     BYTE "You win! 20 digits remembered!",0
 loseMsg    BYTE "Game Over!",0dh,0ah,
                 "The correct answer was",0
 nextMsg    BYTE "Correct! Moving to next level.",0
-
 inputPrompt BYTE "Enter the number: ",0                 ; Console Prompt
 
 ; Mouse Clicker instructions
@@ -72,12 +75,30 @@ game3Inst BYTE "Click as fast as you can for 5 seconds!",0dh,0ah,
                " ",0dh,0ah,
                " ",0dh,0ah,
                " ",0dh,0ah,
-               " ",0            ; multiple blank lines to prevent accidental clicks during instructions
+               " ",0            ; multiple blank lines to prevent accidental clicks after results
 clickCount DWORD 0
 gameActive DWORD 0
 clickStart DWORD 0
-
 clickBuffer BYTE "Clicks: 00000",0
+
+; Math Speed Test instructions
+mathInst BYTE "Welcome to the Math Speed Test",0dh,0ah,
+              "You have 10 questions.",0dh,0ah,
+              "Answer as fast as you can.",0dh,0ah,
+              "After you select your mode, click on the console",0dh,0ah,
+              "The time will start when you see your first question",0
+mathType BYTE "Choose Mode:",0dh,0ah,
+              "YES = Addition",0dh,0ah,
+              "NO = Multiplication",0
+mathPrompt BYTE " = ",0
+mathTimeBuffer BYTE "Completion Time (seconds): ",0
+mathInput BYTE 16 DUP(0)    ; buffer for user input
+mathStart DWORD 0       ; start time for math test
+mathEnd   DWORD 0       ; end time for math test
+mathOp    DWORD 0    ; 0 = add, 1 = multiply
+mathA DWORD ?       ; first operand
+mathB DWORD ?       ; second operand
+
 
 
 
@@ -184,6 +205,14 @@ WinProc PROC,
         cmp eax, IDCANCEL
         je exit_all
 
+        ; --- Game 4 ---
+        INVOKE MessageBox, hWnd, ADDR prompt4,
+            ADDR WindowName, MB_YESNOCANCEL
+        cmp eax, IDYES
+        je option4
+        cmp eax, IDCANCEL
+        je exit_all
+
         jmp menu_start      ; loop back around
 
 	option1:
@@ -199,13 +228,13 @@ WinProc PROC,
 
         ; Start timer
         call GetMseconds
-        mov startTime, eax
+        mov reactStart, eax
         
         ; User reacts by pressing OK and ends timer
-        INVOKE MessageBox, hWnd, ADDR clickTitle,
+        INVOKE MessageBox, hWnd, ADDR clickNow,
             ADDR WindowName, MB_OK
         call GetMseconds
-        sub eax, startTime   ; eax = reaction time
+        sub eax, reactStart   ; eax = reaction time
 
         ; Convert to ASCII
         pushad
@@ -235,7 +264,7 @@ WinProc PROC,
         je menu_start
 
     option2:
-        INVOKE ShowWindow, hMainWnd, SW_HIDE
+        INVOKE ShowWindow, hMainWnd, SW_HIDE    ; hide window during instructions so user can see console
         INVOKE MessageBox, hWnd, ADDR game2Inst,
             ADDR WindowName, MB_OK
     
@@ -381,6 +410,144 @@ WinProc PROC,
     skip_click:
         jmp WinProcExit
 
+    option4:
+        INVOKE ShowWindow, hMainWnd, SW_HIDE    ; hide window during instructions so user can see console
+        INVOKE MessageBox, hWnd, ADDR mathInst,
+            ADDR WindowName, MB_OK
+        INVOKE MessageBox, hWnd, ADDR mathType,
+            ADDR WindowName, MB_YESNO
+
+        cmp eax, IDYES
+        je set_add
+        mov mathOp, 1       ; multiplication
+        jmp type_done
+
+        set_add:
+            mov mathOp, 0   ; addition
+
+        type_done:
+            mov eax, 3000   ; Pause before starting to let user get ready
+            call Delay
+            call Clrscr
+            call GetMseconds
+            mov mathStart, eax      ; start timer right before first question
+            mov ebx, 10             ; Question counter
+        
+        math_loop:
+            mov eax, 10
+            call RandomRange
+            mov mathA, eax          ; first operand, 0-9
+            mov eax, 10
+            call RandomRange
+            mov mathB, eax          ; second operand, 0-9
+        
+        ask_question:
+            mov eax, mathA          ; print first operand
+            call WriteDec
+            cmp mathOp, 0           ; check operation type
+            je print_add
+            mov al, '*'             ; print multiplication operator
+            call WriteChar
+            jmp print_b
+        
+        print_add:
+            mov al, '+'             ; print addition operator
+            call WriteChar
+        
+        print_b:
+            mov eax, mathB          ; print second operand
+            call WriteDec
+        
+            mov edx, OFFSET mathPrompt  ; print equals sign and prompt for answer
+            call WriteString
+        
+            ; Clear input buffer
+            mov edi, OFFSET mathInput
+            mov ecx, 16
+            mov al, 0
+            rep stosb       ; fill mathInput with null terminators to clear any previous input
+        
+            ; Read user input as string
+            mov edx, OFFSET mathInput
+            mov ecx, 16
+            call ReadString
+        
+            ; Convert user input from ASCII to integer
+            mov esi, OFFSET mathInput
+            xor eax, eax
+        
+        convert_input:
+            mov dl, [esi]       ; get next character
+            cmp dl, 0
+            je done_convert
+        
+            cmp dl, '0'         ; check if character is a valid digit
+            jb done_convert
+            cmp dl, '9'
+            ja done_convert
+        
+            sub dl, '0'         ; convert ASCII to numeric value
+            movzx edx, dl
+            imul eax, 10        ; shift previous digits left by multiplying by 10
+            add eax, edx
+        
+            inc esi             ; move to next character
+            jmp convert_input
+        
+        done_convert:
+            ; Calculate correct answer
+            mov edx, mathA
+            mov ecx, mathB
+            cmp mathOp, 0       ; check if addition or multiplication
+            je add_case
+        
+            imul edx, ecx
+            jmp check_ans
+        
+        add_case:
+            add edx, ecx
+        
+        check_ans:
+            cmp eax, edx        ; compare user answer to correct answer
+            jne ask_question
+            call Clrscr
+            dec ebx             ; decrement question counter
+            jnz math_loop       ; if more questions, ask next one
+        
+            
+            call GetMseconds    ; end timer after last question
+            mov mathEnd, eax
+            sub eax, mathStart
+        
+            ; Convert time to seconds and ASCII
+            mov ecx, 1000       ; convert milliseconds to seconds
+            xor edx, edx
+            div ecx
+            pushad      
+            mov ecx, 5
+            mov ebx, 10
+            lea edi, reactBuffer+20
+            convert_math_time:
+                xor edx, edx
+                div ebx
+                add dl, '0'
+                mov [edi], dl
+                dec edi
+                loop convert_math_time
+            popad
+        
+            ; Show result
+            INVOKE MessageBox, hWnd, ADDR mathTimeBuffer,
+                ADDR WindowName, MB_OK
+        
+            ; Ask to play again
+            INVOKE MessageBox, hWnd, ADDR againTitle,
+                ADDR WindowName, MB_YESNO
+            cmp eax, IDYES
+            je option4
+            cmp eax, IDNO
+            je menu_start
+    
     ; Default behavior
     .ELSE
         INVOKE DefWindowProc, hWnd, localMsg, wParam, lParam
@@ -390,6 +557,7 @@ WinProc PROC,
 WinProcExit:
 	ret
 WinProc ENDP
+
 
 ;---------------------------------------------------
 ErrorHandler PROC
